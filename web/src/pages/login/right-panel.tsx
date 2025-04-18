@@ -1,5 +1,4 @@
-import { Flex, Typography } from 'antd';
-import classNames from 'classnames';
+import { Typography } from 'antd';
 
 import { useTranslate } from '@/hooks/common-hooks';
 import styles from './index.less';
@@ -11,11 +10,11 @@ const LoginRightPanel = () => {
   return (
     <section className={styles.rightPanel}>
       {/* <SvgIcon name="login-star" width={80}></SvgIcon> */}
-      <Flex vertical gap={40}>
-        <Title level={1} className={classNames(styles.pink, styles.loginTitle)}>
-          {t('title')}
-        </Title>
-        {/* <Text className={classNames(styles.pink, styles.loginDescription)}>
+      {/* <Flex vertical gap={40}> */}
+      {/* <Title level={1} className={classNames(styles.pink, styles.loginTitle)}>
+          国家超算长沙中心知识库服务
+        </Title> */}
+      {/* <Text className={classNames(styles.pink, styles.loginDescription)}>
           {t('description')}
         </Text>
         <Flex align="center" gap={16}>
@@ -34,7 +33,7 @@ const LoginRightPanel = () => {
             </span>
           </Flex>
         </Flex> */}
-      </Flex>
+      {/* </Flex> */}
     </section>
   );
 };
