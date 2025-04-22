@@ -1,3 +1,4 @@
+import traceback
 from flask import Blueprint, request
 from services.knowledgebases.service import KnowledgebaseService
 from utils import success_response, error_response
@@ -132,13 +133,12 @@ def add_documents_to_knowledgebase(kb_id):
             )
         except Exception as service_error:
             print(f"[ERROR] 服务层错误详情: {str(service_error)}")
-            import traceback
+            
             traceback.print_exc()
             return error_response(str(service_error), code=500)
             
     except Exception as e:
         print(f"[ERROR] 路由层错误详情: {str(e)}")
-        import traceback
         traceback.print_exc()
         return error_response(str(e), code=500)
 
@@ -193,5 +193,110 @@ def get_parse_progress(doc_id):
             return error_response(result['error'], code=404)
         return success_response(data=result)
     except Exception as e:
-        current_app.logger.error(f"获取解析进度失败: {str(e)}")
+        print(f"获取解析进度失败: {str(e)}")
         return error_response("解析进行中，请稍后重试", code=202)
+
+# 获取系统 Embedding 配置路由
+@knowledgebase_bp.route('/system_embedding_config', methods=['GET'])
+def get_system_embedding_config_route():
+    """获取系统级 Embedding 配置的API端点"""
+    try:
+        config_data = KnowledgebaseService.get_system_embedding_config()
+        return success_response(data=config_data)
+    except Exception as e:
+        print(f"获取系统 Embedding 配置失败: {str(e)}")
+        return error_response(message=f"获取配置失败: {str(e)}", code=500) # 返回通用错误信息
+
+# 设置系统 Embedding 配置路由
+@knowledgebase_bp.route('/system_embedding_config', methods=['POST'])
+def set_system_embedding_config_route():
+    """设置系统级 Embedding 配置的API端点"""
+    try:
+        data = request.json
+        if not data:
+            return error_response('请求数据不能为空', code=400)
+
+        llm_name = data.get('llm_name', '').strip()
+        api_base = data.get('api_base', '').strip()
+        api_key = data.get('api_key', '').strip() # 允许空
+
+        if not llm_name or not api_base:
+            return error_response('模型名称和 API 地址不能为空', code=400)
+
+        # 调用服务层进行处理（包括连接测试和数据库操作）
+        success, message = KnowledgebaseService.set_system_embedding_config(
+            llm_name=llm_name,
+            api_base=api_base,
+            api_key=api_key
+        )
+
+        if success:
+            return success_response(message=message)
+        else:
+            # 如果服务层返回失败（例如连接测试失败或数据库错误），将消息返回给前端
+            return error_response(message=message, code=400) # 使用 400 表示操作失败
+
+    except Exception as e:
+        # 捕获路由层或未预料的服务层异常
+        print(f"设置系统 Embedding 配置失败: {str(e)}")
+        return error_response(message=f"设置配置时发生内部错误: {str(e)}", code=500)
+
+@knowledgebase_bp.route('/documents/<doc_id>/parse', methods=['POST'])
+def parse_document_async(doc_id): # 函数名改为 async 以区分
+    """开始异步解析单个文档"""
+    if request.method == 'OPTIONS':
+        response = success_response({})
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        return response
+
+    try:
+        result = KnowledgebaseService.parse_document(doc_id) # 调用同步版本
+        if result.get("success"):
+             return success_response(data={"message": f"文档 {doc_id} 同步解析完成。", "details": result})
+        else:
+             return error_response(result.get("message", "解析失败"), code=500)
+
+    except Exception as e:
+        return error_response(str(e), code=500)
+
+# 启动顺序批量解析路由
+@knowledgebase_bp.route('/<string:kb_id>/batch_parse_sequential/start', methods=['POST'])
+def start_sequential_batch_parse_route(kb_id):
+    """异步启动知识库的顺序批量解析任务"""
+    if request.method == 'OPTIONS':
+        response = success_response({})
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        return response
+
+    try:
+        result = KnowledgebaseService.start_sequential_batch_parse_async(kb_id)
+        if result.get("success"):
+            return success_response(data={"message": result.get("message")})
+        else:
+            # 如果任务已在运行或启动失败，返回错误信息
+            return error_response(result.get("message", "启动失败"), code=409 if "已在运行中" in result.get("message", "") else 500)
+    except Exception as e:
+        print(f"启动顺序批量解析路由处理失败 (KB ID: {kb_id}): {str(e)}")
+        traceback.print_exc()
+        return error_response(f"启动顺序批量解析失败: {str(e)}", code=500)
+
+# 获取顺序批量解析进度路由
+@knowledgebase_bp.route('/<string:kb_id>/batch_parse_sequential/progress', methods=['GET'])
+def get_sequential_batch_parse_progress_route(kb_id):
+    """获取知识库的顺序批量解析任务进度"""
+    if request.method == 'OPTIONS':
+        response = success_response({})
+        response.headers.add('Access-Control-Allow-Methods', 'GET')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        return response
+
+    try:
+        result = KnowledgebaseService.get_sequential_batch_parse_progress(kb_id)
+        # 直接返回从 service 获取的状态信息
+        return success_response(data=result)
+    except Exception as e:
+        print(f"获取顺序批量解析进度路由处理失败 (KB ID: {kb_id}): {str(e)}")
+        traceback.print_exc()
+        return error_response(f"获取进度失败: {str(e)}", code=500)
